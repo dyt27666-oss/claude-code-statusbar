@@ -1,7 +1,9 @@
 <p align="center">
-  <h1 align="center">Claude Code StatusBar</h1>
+  <h1 align="center">Claude Code StatusBar v2</h1>
   <p align="center">
     Real-time rate limits & context window status bar for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>
+    <br/>
+    Now with <b>burn rate</b>, <b>color warnings</b>, and <b>1-second auto-refresh</b>
   </p>
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
@@ -12,6 +14,7 @@
   <p align="center">
     <a href="#install">Install</a> &nbsp;·&nbsp;
     <a href="#what-it-shows">Features</a> &nbsp;·&nbsp;
+    <a href="#whats-new-in-v2">v2 Changes</a> &nbsp;·&nbsp;
     <a href="#how-it-works">How It Works</a> &nbsp;·&nbsp;
     <a href="#customization">Customize</a>
   </p>
@@ -23,17 +26,44 @@
 ---
 
 ```
-⚡Session █████░░░░░ 55% ↻2h0m │ 🗓Week ███░░░░░░░ 32% ↻Sun 00:00 │ Ctx ███░░░░░ 42%(420k/1.0M) │ In:284k Out:67k
+⚡Session ████░░░░░░ 45% ↻2h30m15s 🔥3.2%/h ~17h left │ 🗓Week ███████░░░ 73% ↻Sun 00:00 🔥1.5%/h │ Ctx ██░░░░░░ 25%(250k/1.0M) │ In:284k Out:67k
 ```
 
 Built on Claude Code's **native `statusLine` API** — no hacks, no wrappers, no extra processes. Just a single shell script.
+
+## What's New in v2
+
+### Burn Rate
+
+Tracks your usage over time and calculates how fast you're consuming limits:
+
+- **Rate display** — `🔥3.2%/h` shows your current burn speed
+- **ETA to depletion** — `~2h40m left` estimates when you'll hit the limit
+- History is auto-recorded and deduplicated, keeping the last 120 data points
+- Handles limit resets gracefully (ignores negative rate spikes)
+
+### Color Warnings
+
+Progress bars and percentages change color based on usage level:
+
+| Level | Threshold | Color |
+|-------|-----------|-------|
+| Safe | < 60% | Green |
+| Warning | 60% - 80% | Yellow |
+| Danger | > 80% | Red (bold) |
+
+### 1-Second Auto-Refresh
+
+- Countdown timers (`↻2h30m15s`) now update every second with live accuracy
+- Data is cached to `/tmp/claude-sb-cache.json` — between API calls, the script reads cached data and recalculates countdowns in real-time
+- `refreshTime: 1` in settings enables 1-second polling
 
 ## What It Shows
 
 | Section | Description |
 |---------|-------------|
-| ⚡ Session | 5-hour session rate limit usage + reset countdown |
-| 🗓 Week | 7-day weekly rate limit usage + reset time |
+| ⚡ Session | 5-hour session rate limit usage + reset countdown + burn rate |
+| 🗓 Week | 7-day weekly rate limit usage + reset time + burn rate |
 | Ctx | Context window usage (percentage + token counts) |
 | In/Out | Cumulative input/output tokens for current session |
 
@@ -57,6 +87,7 @@ Then **restart Claude Code**. The status bar appears automatically at the bottom
 
 > [!NOTE]
 > Rate limit data (⚡Session and 🗓Week) only appears after your first API call in the session. Before that, only context window info is shown.
+> Burn rate requires at least 2 minutes of data before it starts displaying.
 
 ## Uninstall
 
@@ -88,7 +119,28 @@ Claude Code passes a JSON object via stdin containing:
 
 This is the **same data source** as the `/usage` command — both read from API response headers (`anthropic-ratelimit-unified-*`), ensuring the status bar stays perfectly in sync.
 
-`statusline.sh` reads this JSON with [jq](https://jqlang.github.io/jq/), formats it with progress bars and countdowns, and outputs one line.
+### v2 Architecture
+
+```
+Claude Code stdin (JSON)
+        │
+        ▼
+  ┌─────────────┐     ┌──────────────────────┐
+  │ statusline.sh│────▶│ /tmp/claude-sb-cache  │  (data caching)
+  │             │     └──────────────────────┘
+  │  parse JSON │     ┌──────────────────────┐
+  │  calc burn  │◀───▶│ /tmp/claude-sb-history│  (burn rate history)
+  │  add colors │     └──────────────────────┘
+  │  format out │
+  └──────┬──────┘
+         │
+         ▼
+   Colored status line (ANSI)
+```
+
+- **Cache**: When stdin is empty (between API calls), reads last known data from cache and recalculates countdowns with current time
+- **History**: Records usage data points for burn rate calculation (deduplicated, max 120 entries)
+- **Colors**: ANSI escape codes for green/yellow/red based on thresholds
 
 ## Customization
 
@@ -98,12 +150,19 @@ Edit `statusline.sh` to change:
 - **Progress bar characters** — replace `█` and `░` with any characters you like
 - **Sections displayed** — comment out any section block to hide it
 - **Time format** — modify `format_reset()` function
+- **Color thresholds** — edit the `get_color()` function (default: 60% yellow, 80% red)
+- **Burn rate window** — change `target_ts=$(( NOW - 600 ))` to adjust the lookback period (default: 10 minutes)
+- **Refresh interval** — edit `refreshTime` in `~/.claude/settings.json` (default: 1 second)
 
 ## FAQ
 
 **I only see context info, no Session/Week percentages?**
 
 Rate limit headers are returned by the API after your first message. Send a message and the data will appear.
+
+**Burn rate shows nothing?**
+
+Burn rate needs at least 2 minutes of history data with changing values. Keep using Claude Code and it will appear.
 
 **Does this work with API keys (non-subscription)?**
 
@@ -112,6 +171,10 @@ Context window and token counts will work. Rate limit sections depend on whether
 **Will this break my Claude Code?**
 
 No. `statusLine` is an official, supported feature. If the script fails, Claude Code simply shows nothing.
+
+**Can I disable colors?**
+
+Set all `C_*` color variables to empty strings at the top of `statusline.sh`.
 
 ## License
 

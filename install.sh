@@ -69,7 +69,7 @@ echo "  [✓] Backup → ${BACKUP}"
 # 用 jq 写入 statusLine 配置（保留已有设置）
 TEMP_FILE=$(mktemp)
 if jq --arg cmd "$STATUSLINE_SCRIPT" \
-    '. + {"statusLine": {"type": "command", "command": $cmd}}' \
+    '. + {"statusLine": {"type": "command", "command": $cmd, "refreshTime": 1}}' \
     "$SETTINGS_FILE" > "$TEMP_FILE" 2>/dev/null; then
     mv "$TEMP_FILE" "$SETTINGS_FILE"
     echo "  [✓] statusLine config written"
