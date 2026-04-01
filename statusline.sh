@@ -114,7 +114,7 @@ if [ -n "$WEEK_PCT" ]; then
     WEEK_BAR=$(make_bar "$WEEK_PCT" 10)
     WEEK_RESET_STR=$(format_reset "$WEEK_RESET")
     WEEK_PCT_INT=$(printf '%.0f' "$WEEK_PCT")
-    WEEK_PART="📅Week ${WEEK_BAR} ${WEEK_PCT_INT}%"
+    WEEK_PART="🗓Week ${WEEK_BAR} ${WEEK_PCT_INT}%"
     [ -n "$WEEK_RESET_STR" ] && WEEK_PART+=" ↻${WEEK_RESET_STR}"
     [ -n "$OUTPUT" ] && OUTPUT+=" │ "
     OUTPUT+="$WEEK_PART"
