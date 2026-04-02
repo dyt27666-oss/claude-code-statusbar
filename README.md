@@ -7,8 +7,8 @@
   </p>
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg" alt="Platform">
-    <img src="https://img.shields.io/badge/shell-bash-green.svg" alt="Shell">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
+    <img src="https://img.shields.io/badge/shell-bash%20%7C%20PowerShell-green.svg" alt="Shell">
     <img src="https://img.shields.io/badge/claude--code-v2.1%2B-purple.svg" alt="Claude Code">
   </p>
   <p align="center">
@@ -69,18 +69,37 @@ Progress bars and percentages change color based on usage level:
 
 ## Requirements
 
+### macOS / Linux
+
 | Dependency | Description |
 |------------|-------------|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic's CLI for Claude (v2.1+) |
 | [jq](https://jqlang.github.io/jq/) | Lightweight JSON processor |
 | [Bash](https://www.gnu.org/software/bash/) | Pre-installed on macOS and Linux |
 
+### Windows
+
+| Dependency | Description |
+|------------|-------------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic's CLI for Claude (v2.1+) |
+| [PowerShell 5.1+](https://learn.microsoft.com/en-us/powershell/) | Pre-installed on Windows 10+ (no jq needed!) |
+
 ## Install
+
+### macOS / Linux
 
 ```bash
 git clone https://github.com/dyt27666-oss/claude-code-statusbar.git
 cd claude-code-statusbar
 bash install.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/dyt27666-oss/claude-code-statusbar.git
+cd claude-code-statusbar
+pwsh install.ps1
 ```
 
 Then **restart Claude Code**. The status bar appears automatically at the bottom of the input area.
@@ -89,11 +108,23 @@ Then **restart Claude Code**. The status bar appears automatically at the bottom
 > Rate limit data (⚡Session and 🗓Week) only appears after your first API call in the session. Before that, only context window info is shown.
 > Burn rate requires at least 2 minutes of data before it starts displaying.
 
+> [!TIP]
+> **Windows users**: The PowerShell version uses built-in `ConvertFrom-Json` — no need to install jq!
+
 ## Uninstall
+
+### macOS / Linux
 
 ```bash
 cd claude-code-statusbar
 bash uninstall.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+cd claude-code-statusbar
+pwsh uninstall.ps1
 ```
 
 ## How It Works
@@ -125,14 +156,15 @@ This is the **same data source** as the `/usage` command — both read from API 
 Claude Code stdin (JSON)
         │
         ▼
-  ┌─────────────┐     ┌──────────────────────┐
-  │ statusline.sh│────▶│ /tmp/claude-sb-cache  │  (data caching)
-  │             │     └──────────────────────┘
-  │  parse JSON │     ┌──────────────────────┐
-  │  calc burn  │◀───▶│ /tmp/claude-sb-history│  (burn rate history)
-  │  add colors │     └──────────────────────┘
-  │  format out │
-  └──────┬──────┘
+  ┌──────────────────┐     ┌──────────────────────┐
+  │ statusline.sh    │────▶│ $TEMP/claude-sb-cache │  (data caching)
+  │ statusline.ps1   │     └──────────────────────┘
+  │                  │     ┌──────────────────────┐
+  │  parse JSON      │◀───▶│ $TEMP/claude-sb-hist  │  (burn rate history)
+  │  calc burn rate  │     └──────────────────────┘
+  │  add ANSI colors │
+  │  format output   │
+  └────────┬─────────┘
          │
          ▼
    Colored status line (ANSI)
@@ -144,7 +176,7 @@ Claude Code stdin (JSON)
 
 ## Customization
 
-Edit `statusline.sh` to change:
+Edit `statusline.sh` (macOS/Linux) or `statusline.ps1` (Windows) to change:
 
 - **Progress bar width** — adjust the `10` or `8` in `make_bar` calls
 - **Progress bar characters** — replace `█` and `░` with any characters you like
@@ -174,7 +206,7 @@ No. `statusLine` is an official, supported feature. If the script fails, Claude 
 
 **Can I disable colors?**
 
-Set all `C_*` color variables to empty strings at the top of `statusline.sh`.
+Set all `C_*` color variables to empty strings at the top of `statusline.sh` / `statusline.ps1`.
 
 ## License
 

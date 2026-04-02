@@ -7,8 +7,8 @@
   </p>
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg" alt="Platform">
-    <img src="https://img.shields.io/badge/shell-bash-green.svg" alt="Shell">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platform">
+    <img src="https://img.shields.io/badge/shell-bash%20%7C%20PowerShell-green.svg" alt="Shell">
     <img src="https://img.shields.io/badge/claude--code-v2.1%2B-purple.svg" alt="Claude Code">
   </p>
   <p align="center">
@@ -69,18 +69,37 @@
 
 ## 前置依赖
 
+### macOS / Linux
+
 | 依赖 | 说明 |
 |------|------|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic 官方 CLI 工具（v2.1+） |
 | [jq](https://jqlang.github.io/jq/) | 轻量级 JSON 处理器 |
 | [Bash](https://www.gnu.org/software/bash/) | macOS 和 Linux 自带 |
 
+### Windows
+
+| 依赖 | 说明 |
+|------|------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic 官方 CLI 工具（v2.1+） |
+| [PowerShell 5.1+](https://learn.microsoft.com/en-us/powershell/) | Windows 10+ 自带（无需安装 jq！） |
+
 ## 安装
+
+### macOS / Linux
 
 ```bash
 git clone https://github.com/dyt27666-oss/claude-code-statusbar.git
 cd claude-code-statusbar
 bash install.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/dyt27666-oss/claude-code-statusbar.git
+cd claude-code-statusbar
+pwsh install.ps1
 ```
 
 然后**重启 Claude Code**，状态栏会自动显示在输入框下方。
@@ -89,11 +108,23 @@ bash install.sh
 > 速率限额数据（⚡Session 和 🗓Week）在会话首次 API 调用后才会出现。在此之前只显示上下文窗口信息。
 > 燃烧速率需要至少 2 分钟的数据积累后才会开始显示。
 
+> [!TIP]
+> **Windows 用户**：PowerShell 版本使用内置 `ConvertFrom-Json`，无需安装 jq！
+
 ## 卸载
+
+### macOS / Linux
 
 ```bash
 cd claude-code-statusbar
 bash uninstall.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+cd claude-code-statusbar
+pwsh uninstall.ps1
 ```
 
 ## 工作原理
@@ -125,14 +156,15 @@ Claude Code 通过 stdin 传入 JSON 对象：
 Claude Code stdin (JSON)
         │
         ▼
-  ┌─────────────┐     ┌──────────────────────┐
-  │ statusline.sh│────▶│ /tmp/claude-sb-cache  │  (数据缓存)
-  │             │     └──────────────────────┘
-  │  解析 JSON   │     ┌──────────────────────┐
-  │  计算燃烧率  │◀───▶│ /tmp/claude-sb-history│  (燃烧速率历史)
-  │  添加颜色    │     └──────────────────────┘
-  │  格式化输出  │
-  └──────┬──────┘
+  ┌──────────────────┐     ┌──────────────────────┐
+  │ statusline.sh    │────▶│ $TEMP/claude-sb-cache │  (数据缓存)
+  │ statusline.ps1   │     └──────────────────────┘
+  │                  │     ┌──────────────────────┐
+  │  解析 JSON       │◀───▶│ $TEMP/claude-sb-hist  │  (燃烧速率历史)
+  │  计算燃烧率      │     └──────────────────────┘
+  │  添加 ANSI 颜色  │
+  │  格式化输出      │
+  └────────┬─────────┘
          │
          ▼
    彩色状态行 (ANSI)
@@ -144,7 +176,7 @@ Claude Code stdin (JSON)
 
 ## 自定义
 
-编辑 `statusline.sh` 可修改：
+编辑 `statusline.sh`（macOS/Linux）或 `statusline.ps1`（Windows）可修改：
 
 - **进度条宽度** — 调整 `make_bar` 调用中的 `10` 或 `8`
 - **进度条字符** — 将 `█` 和 `░` 替换为你喜欢的字符
@@ -174,7 +206,7 @@ Claude Code stdin (JSON)
 
 **如何关闭颜色？**
 
-将 `statusline.sh` 顶部的所有 `C_*` 颜色变量设为空字符串即可。
+将 `statusline.sh` / `statusline.ps1` 顶部的所有 `C_*` 颜色变量设为空字符串即可。
 
 ## 许可证
 
