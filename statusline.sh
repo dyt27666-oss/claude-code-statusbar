@@ -33,35 +33,33 @@ if [ -z "$INPUT" ]; then
     exit 0
 fi
 
-# ---- 解析数据 ----
-FIVE_PCT=$(echo "$INPUT" | jq -r '.rate_limits.five_hour.used_percentage // empty' 2>/dev/null)
-FIVE_RESET=$(echo "$INPUT" | jq -r '.rate_limits.five_hour.resets_at // empty' 2>/dev/null)
-WEEK_PCT=$(echo "$INPUT" | jq -r '.rate_limits.seven_day.used_percentage // empty' 2>/dev/null)
-WEEK_RESET=$(echo "$INPUT" | jq -r '.rate_limits.seven_day.resets_at // empty' 2>/dev/null)
-CTX_USED_PCT=$(echo "$INPUT" | jq -r '.context_window.used_percentage // empty' 2>/dev/null)
-CTX_SIZE=$(echo "$INPUT" | jq -r '.context_window.context_window_size // empty' 2>/dev/null)
-TOTAL_IN=$(echo "$INPUT" | jq -r '.context_window.total_input_tokens // 0' 2>/dev/null)
-TOTAL_OUT=$(echo "$INPUT" | jq -r '.context_window.total_output_tokens // 0' 2>/dev/null)
+# ---- 一次性解析所有字段 ----
+NOW=$(date +%s)
+IFS=$'\t' read -r FIVE_PCT FIVE_RESET WEEK_PCT WEEK_RESET CTX_USED_PCT CTX_SIZE TOTAL_IN TOTAL_OUT < <(
+    jq -r '[
+        (.rate_limits.five_hour.used_percentage // ""),
+        (.rate_limits.five_hour.resets_at // ""),
+        (.rate_limits.seven_day.used_percentage // ""),
+        (.rate_limits.seven_day.resets_at // ""),
+        (.context_window.used_percentage // ""),
+        (.context_window.context_window_size // ""),
+        (.context_window.total_input_tokens // 0),
+        (.context_window.total_output_tokens // 0)
+    ] | @tsv' <<< "$INPUT" 2>/dev/null
+)
 
 # ---- 记录历史数据（用于燃烧速率计算）----
-NOW=$(date +%s)
 if [ -n "$FIVE_PCT" ] || [ -n "$WEEK_PCT" ]; then
-    # 只在有新数据（stdin 非空）时记录，避免缓存重复写入
-    if [ -n "$(echo "$INPUT" | jq -r '.rate_limits // empty' 2>/dev/null)" ]; then
-        # 检查是否与上次记录相同（去重）
+    if jq -e '.rate_limits' <<< "$INPUT" > /dev/null 2>&1; then
         LAST_LINE=""
         [ -f "$HISTORY_FILE" ] && LAST_LINE=$(tail -1 "$HISTORY_FILE" 2>/dev/null)
-        LAST_FIVE=$(echo "$LAST_LINE" | cut -d'|' -f2 2>/dev/null)
-        LAST_WEEK=$(echo "$LAST_LINE" | cut -d'|' -f3 2>/dev/null)
+        IFS='|' read -r _ LAST_FIVE LAST_WEEK <<< "$LAST_LINE"
 
         if [ "${FIVE_PCT:-0}" != "$LAST_FIVE" ] || [ "${WEEK_PCT:-0}" != "$LAST_WEEK" ]; then
             echo "${NOW}|${FIVE_PCT:-0}|${WEEK_PCT:-0}" >> "$HISTORY_FILE"
-            # 保留最近 MAX_HISTORY 条
-            if [ -f "$HISTORY_FILE" ]; then
-                LINES=$(wc -l < "$HISTORY_FILE" | tr -d ' ')
-                if [ "$LINES" -gt "$MAX_HISTORY" ]; then
-                    tail -n "$MAX_HISTORY" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
-                fi
+            LINES=$(wc -l < "$HISTORY_FILE" | tr -d ' ')
+            if [ "$LINES" -gt "$MAX_HISTORY" ]; then
+                tail -n "$MAX_HISTORY" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
             fi
         fi
     fi
@@ -69,7 +67,8 @@ fi
 
 # ---- 根据百分比获取颜色 ----
 get_color() {
-    local pct_int=$(printf '%.0f' "${1:-0}" 2>/dev/null || echo "0")
+    local pct_int
+    pct_int=$(printf '%.0f' "${1:-0}" 2>/dev/null || echo "0")
     if [ "$pct_int" -ge 80 ]; then
         printf '%b' "$C_RED_BOLD"
     elif [ "$pct_int" -ge 60 ]; then
@@ -83,7 +82,8 @@ get_color() {
 make_bar() {
     local pct=${1:-0}
     local width=${2:-10}
-    local pct_int=$(printf '%.0f' "$pct" 2>/dev/null || echo "0")
+    local pct_int
+    pct_int=$(printf '%.0f' "$pct" 2>/dev/null || echo "0")
     local color
     color=$(get_color "$pct")
     local filled=$(( pct_int * width / 100 ))
@@ -102,14 +102,9 @@ make_bar() {
 # ---- 格式化重置时间（实时计算）----
 format_reset() {
     local reset_ts="$1"
-    if [ -z "$reset_ts" ]; then
-        echo ""
-        return
-    fi
+    [ -z "$reset_ts" ] && echo "" && return
 
-    local now
-    now=$(date +%s)
-    local diff=$(( reset_ts - now ))
+    local diff=$(( reset_ts - NOW ))
 
     if [ "$diff" -le 0 ]; then
         echo "now"
@@ -139,13 +134,11 @@ format_reset() {
 # ---- 格式化 token ----
 format_tokens() {
     local n=${1:-0}
-    if [ "$n" -ge 1000000 ]; then
-        printf "%.1fM" "$(echo "scale=1; $n/1000000" | bc 2>/dev/null || echo "0")"
-    elif [ "$n" -ge 1000 ]; then
-        printf "%.0fk" "$(echo "scale=0; $n/1000" | bc 2>/dev/null || echo "0")"
-    else
-        echo "$n"
-    fi
+    awk -v n="$n" 'BEGIN {
+        if (n >= 1000000) printf "%.1fM", n/1000000
+        else if (n >= 1000) printf "%.0fk", n/1000
+        else printf "%d", n
+    }'
 }
 
 # ---- 燃烧速率计算 ----
@@ -154,101 +147,54 @@ calc_burn_rate() {
     local current_pct=${1:-0}
     local col=$2
 
-    if [ ! -f "$HISTORY_FILE" ]; then
-        echo ""
-        return
-    fi
+    [ ! -f "$HISTORY_FILE" ] && echo "" && return
 
     local lines
     lines=$(wc -l < "$HISTORY_FILE" | tr -d ' ')
-    if [ "$lines" -lt 2 ]; then
-        echo ""
-        return
-    fi
+    [ "$lines" -lt 2 ] && echo "" && return
 
-    # 找 10 分钟前的数据点（或最早的可用数据）
-    local target_ts=$(( NOW - 600 ))
-    local ref_line=""
+    # awk 单次扫描：找参考点 + 完成所有浮点运算
+    local result
+    result=$(awk -F'|' \
+        -v target="$(( NOW - 600 ))" \
+        -v col="$col" \
+        -v now="$NOW" \
+        -v current="$current_pct" '
+        NR == 1 { first_ts = $1; first_val = $col }
+        $1 + 0 <= target + 0 { ref_ts = $1; ref_val = $col }
+        END {
+            if (ref_ts == "") { ref_ts = first_ts; ref_val = first_val }
+            time_diff = now - ref_ts
+            if (time_diff < 120) exit
+            val_diff = current + 0 - ref_val + 0
+            if (val_diff <= 0) exit
+            rate = val_diff * 3600 / time_diff
+            if (rate <= 0) exit
+            eta_secs = int((100 - current) / rate * 3600)
+            printf "%.1f|%d", rate, eta_secs
+        }
+    ' "$HISTORY_FILE")
 
-    while IFS= read -r line; do
-        local ts
-        ts=$(echo "$line" | cut -d'|' -f1)
-        if [ "$ts" -le "$target_ts" ] 2>/dev/null; then
-            ref_line="$line"
-        fi
-    done < "$HISTORY_FILE"
+    [ -z "$result" ] && echo "" && return
 
-    # 如果没有 10 分钟前的数据，用最早的记录
-    if [ -z "$ref_line" ]; then
-        ref_line=$(head -1 "$HISTORY_FILE")
-    fi
-
-    local ref_ts
-    ref_ts=$(echo "$ref_line" | cut -d'|' -f1)
-    local ref_val
-    ref_val=$(echo "$ref_line" | cut -d'|' -f"$col")
-
-    local time_diff=$(( NOW - ref_ts ))
-
-    # 至少需要 120 秒的数据
-    if [ "$time_diff" -lt 120 ]; then
-        echo ""
-        return
-    fi
-
-    # 计算每小时速率
-    local val_diff
-    val_diff=$(echo "$current_pct - $ref_val" | bc 2>/dev/null || echo "0")
-
-    # 如果是负数（限额重置了），忽略
-    local is_negative
-    is_negative=$(echo "$val_diff < 0" | bc 2>/dev/null || echo "0")
-    if [ "$is_negative" -eq 1 ]; then
-        echo ""
-        return
-    fi
-
-    local is_zero
-    is_zero=$(echo "$val_diff == 0" | bc 2>/dev/null || echo "1")
-    if [ "$is_zero" -eq 1 ]; then
-        echo ""
-        return
-    fi
-
-    local rate
-    rate=$(echo "scale=1; $val_diff * 3600 / $time_diff" | bc 2>/dev/null || echo "0")
-
-    # 预估耗尽时间
-    local remaining
-    remaining=$(echo "100 - $current_pct" | bc 2>/dev/null || echo "0")
-    local eta_secs=""
-
-    local rate_positive
-    rate_positive=$(echo "$rate > 0" | bc 2>/dev/null || echo "0")
-    if [ "$rate_positive" -eq 1 ]; then
-        local eta_hours
-        eta_hours=$(echo "scale=2; $remaining / $rate" | bc 2>/dev/null || echo "0")
-        eta_secs=$(echo "scale=0; $eta_hours * 3600 / 1" | bc 2>/dev/null || echo "0")
-    fi
+    local rate eta_secs
+    IFS='|' read -r rate eta_secs <<< "$result"
 
     local color
     color=$(get_color "$current_pct")
+    local output="${color}🔥${rate}%/h${C_RESET}"
 
-    # 格式化输出
-    local result="${color}🔥${rate}%/h${C_RESET}"
-
-    # 添加预估耗尽时间
     if [ -n "$eta_secs" ] && [ "$eta_secs" -gt 0 ] 2>/dev/null; then
         local eta_h=$(( eta_secs / 3600 ))
         local eta_m=$(( (eta_secs % 3600) / 60 ))
         if [ "$eta_h" -gt 0 ]; then
-            result+="${C_DIM} ~${eta_h}h${eta_m}m left${C_RESET}"
+            output+="${C_DIM} ~${eta_h}h${eta_m}m left${C_RESET}"
         else
-            result+="${C_DIM} ~${eta_m}m left${C_RESET}"
+            output+="${C_DIM} ~${eta_m}m left${C_RESET}"
         fi
     fi
 
-    printf '%b' "$result"
+    printf '%b' "$output"
 }
 
 # ---- 百分比文字带颜色 ----
@@ -272,7 +218,6 @@ if [ -n "$FIVE_PCT" ]; then
     SESS_PART="⚡Session ${FIVE_BAR} ${FIVE_PCT_STR}"
     [ -n "$FIVE_RESET_STR" ] && SESS_PART+=" ↻${FIVE_RESET_STR}"
 
-    # 燃烧速率
     BURN=$(calc_burn_rate "$FIVE_PCT" 2)
     [ -n "$BURN" ] && SESS_PART+=" ${BURN}"
 
@@ -287,7 +232,6 @@ if [ -n "$WEEK_PCT" ]; then
     WEEK_PART="🗓 Week ${WEEK_BAR} ${WEEK_PCT_STR}"
     [ -n "$WEEK_RESET_STR" ] && WEEK_PART+=" ↻${WEEK_RESET_STR}"
 
-    # 燃烧速率
     BURN_W=$(calc_burn_rate "$WEEK_PCT" 3)
     [ -n "$BURN_W" ] && WEEK_PART+=" ${BURN_W}"
 
