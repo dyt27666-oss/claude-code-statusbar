@@ -216,7 +216,7 @@ if [ -n "$FIVE_PCT" ]; then
     FIVE_RESET_STR=$(format_reset "$FIVE_RESET")
     FIVE_PCT_STR=$(colored_pct "$FIVE_PCT")
     SESS_PART="⚡Session ${FIVE_BAR} ${FIVE_PCT_STR}"
-    [ -n "$FIVE_RESET_STR" ] && SESS_PART+=" ↻${FIVE_RESET_STR}"
+    [ -n "$FIVE_RESET_STR" ] && SESS_PART+=" ↻ ${FIVE_RESET_STR}"
 
     BURN=$(calc_burn_rate "$FIVE_PCT" 2)
     [ -n "$BURN" ] && SESS_PART+=" ${BURN}"
@@ -230,7 +230,7 @@ if [ -n "$WEEK_PCT" ]; then
     WEEK_RESET_STR=$(format_reset "$WEEK_RESET")
     WEEK_PCT_STR=$(colored_pct "$WEEK_PCT")
     WEEK_PART="🗓 Week ${WEEK_BAR} ${WEEK_PCT_STR}"
-    [ -n "$WEEK_RESET_STR" ] && WEEK_PART+=" ↻${WEEK_RESET_STR}"
+    [ -n "$WEEK_RESET_STR" ] && WEEK_PART+=" ↻ ${WEEK_RESET_STR}"
 
     BURN_W=$(calc_burn_rate "$WEEK_PCT" 3)
     [ -n "$BURN_W" ] && WEEK_PART+=" ${BURN_W}"
