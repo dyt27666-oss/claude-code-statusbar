@@ -270,3 +270,8 @@ if [ -z "$OUTPUT" ]; then
 fi
 
 echo -e "$OUTPUT"
+
+# ---- GPU 监控 HUD (gaming_ai_meta_skills 内置脚本) ----
+# 该脚本自包含；无告警时静默、有告警时追加 2-3 行；与本仓解耦
+GPU_HUD="/home/vscode-server/gaming_ai_meta_skills/monitoring/scripts/statusline_gpu_hud.sh"
+[ -x "$GPU_HUD" ] && bash "$GPU_HUD"
